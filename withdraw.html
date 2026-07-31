@@ -3,8 +3,22 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-    <title>Binance Invest • سحب الأرباح</title>
+    <title>سحب الأرباح • Binance Invest</title>
     <meta name="description" content="صفحة سحب الأرباح في Binance Invest - اسحب أرباحك بسهولة." />
+    <meta name="keywords" content="سحب, أرباح, Binance, استثمار, محفظة" />
+    <link rel="canonical" href="https://binanceinvestment.pages.dev/withdraw.html" />
+    <!-- Open Graph / Facebook / Telegram / WhatsApp -->
+    <meta property="og:title" content="سحب الأرباح • Binance Invest" />
+    <meta property="og:description" content="اسحب أرباحك بسهولة وأمان من Binance Invest. خطط مرنة، سحب سريع، ودعم فني متواصل." />
+    <meta property="og:image" content="https://binanceinvestment.pages.dev/qe.png" />
+    <meta property="og:url" content="https://binanceinvestment.pages.dev/withdraw.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Binance Invest" />
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="سحب الأرباح • Binance Invest" />
+    <meta name="twitter:description" content="اسحب أرباحك بسهولة وأمان من Binance Invest. خطط مرنة، سحب سريع، ودعم فني متواصل." />
+    <meta name="twitter:image" content="https://binanceinvestment.pages.dev/qe.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <!-- Firebase SDK -->
@@ -265,6 +279,7 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
         let currentUser = null;
+        let unsubscribeUser = null;
 
         // ========== دوال عامة ==========
         function showToast(message) {
@@ -320,31 +335,47 @@
             diamond: { name: 'الماسية', amount: 1000, daily: 500, total: 5000 }
         };
 
-        // ========== مراقبة حالة المستخدم وتحديث البيانات ==========
-        auth.onAuthStateChanged(async user => {
+        // ========== مستمع Snapshot لبيانات المستخدم ==========
+        function listenToUserData(uid) {
+            if (unsubscribeUser) unsubscribeUser();
+            unsubscribeUser = db.collection('users').doc(uid).onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.deadline) {
+                        deadline = new Date(data.deadline);
+                        localStorage.setItem(STORAGE_KEY, deadline.getTime().toString());
+                    }
+                    if (data.activePlan) {
+                        localStorage.setItem(PLAN_KEY, JSON.stringify(data.activePlan));
+                    } else {
+                        localStorage.removeItem(PLAN_KEY);
+                    }
+                    if (data.fullName) {
+                        document.getElementById('sidebarUserName').textContent = data.fullName;
+                        document.getElementById('sidebarAvatar').textContent = data.fullName.charAt(0);
+                    }
+                    // إعادة عرض الصفحة بالبيانات الجديدة
+                    renderWithdrawPage();
+                }
+            }, error => {
+                console.log('تعذر الاتصال بـ Firestore في السحب');
+            });
+        }
+
+        // ========== مراقبة حالة المستخدم ==========
+        auth.onAuthStateChanged(user => {
             currentUser = user;
             if (user) {
-                try {
-                    const doc = await db.collection('users').doc(user.uid).get();
-                    if (doc.exists) {
-                        const data = doc.data();
-                        if (data.fullName) {
-                            document.getElementById('sidebarUserName').textContent = data.fullName;
-                            document.getElementById('sidebarAvatar').textContent = data.fullName.charAt(0);
-                        }
-                        if (data.deadline) {
-                            deadline = new Date(data.deadline);
-                            localStorage.setItem(STORAGE_KEY, deadline.getTime().toString());
-                        }
-                        if (data.activePlan) {
-                            localStorage.setItem(PLAN_KEY, JSON.stringify(data.activePlan));
-                        }
-                    }
-                } catch (e) {
-                    console.log('تعذر تحديث البيانات من Firebase');
-                }
+                // تحديث أولي من localStorage
+                const storedDeadline = localStorage.getItem(STORAGE_KEY);
+                if (storedDeadline) deadline = new Date(parseInt(storedDeadline));
+                renderWithdrawPage();
+                // بدء المستمع
+                listenToUserData(user.uid);
+            } else {
+                if (unsubscribeUser) unsubscribeUser();
+                renderWithdrawPage();
             }
-            renderWithdrawPage();
         });
 
         function renderWithdrawPage() {
